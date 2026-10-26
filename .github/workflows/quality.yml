@@ -431,6 +431,13 @@ jobs:
         env:
           CI_SHARD_OUTPUT_DIR: ${{ runner.temp }}/ci-web
 
+      - name: Install WebKit for phone browser coverage
+        if: matrix.shard == 1
+        run: pnpm --filter @musubi/web exec playwright install --with-deps webkit
+      - name: Verify phone browsers in Chromium and WebKit
+        if: matrix.shard == 1
+        run: pnpm --filter @musubi/web exec playwright test --config=playwright.mobile.config.ts
+
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

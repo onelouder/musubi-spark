@@ -21,7 +21,6 @@ async function fixture(page: Page, initial = [] as ReturnType<typeof event>[], w
   const errors: string[] = [];
   runtimeErrors.set(page, errors);
   page.on("pageerror", error => errors.push(error.message));
-  await page.addInitScript(() => sessionStorage.setItem("musubi-mobile-web-test-bypass", "true"));
   const writes: { method: string; body: any }[] = [];
   let events = [...initial];
   const settings = { dateFormat: "dmy", defaultCalendarView: "week", notificationsOnByDefault: false, onboarded: true, theme: "system", timeFormat: "24h", weekStartsOn };

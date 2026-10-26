@@ -70,6 +70,8 @@
       "title": "Canceling deletion sends no mutation and returns to the task",
       "steps": [
         { "action": "click", "role": "button", "name": "More task actions" },
+        { "action": "expect", "role": "menuitem", "name": "Delete", "state": "visible" },
+        { "action": "expect", "role": "dialog", "name": "Delete task", "state": "absent" },
         { "action": "click", "role": "menuitem", "name": "Delete" },
         { "action": "expect", "role": "dialog", "name": "Delete task", "state": "visible" },
         { "action": "click", "role": "button", "name": "Cancel" },

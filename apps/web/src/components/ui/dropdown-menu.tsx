@@ -31,7 +31,7 @@ function DropdownMenu({ open, defaultOpen = false, onOpenChange, ...props }: Rea
   );
 }
 
-function DropdownMenuTrigger({ onPointerDown, onPointerCancel, onKeyDown, onClick, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
+function DropdownMenuTrigger({ onPointerDown, onTouchEnd, onPointerCancel, onKeyDown, onClick, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
   const menu = React.useContext(DropdownMenuContext);
   const narrow = React.useSyncExternalStore(subscribeNarrow, () => matchMedia(NARROW_QUERY).matches, () => false);
   const openAtPress = React.useRef<boolean | undefined>(undefined);
@@ -48,6 +48,20 @@ function DropdownMenuTrigger({ onPointerDown, onPointerCancel, onKeyDown, onClic
         openAtPress.current = menu?.open;
         event.preventDefault();
       }}
+      onTouchEnd={(event) => {
+        onTouchEnd?.(event);
+        if (event.defaultPrevented || openAtPress.current === undefined || !menu) return;
+        const touch = event.changedTouches[0];
+        const bounds = event.currentTarget.getBoundingClientRect();
+        if (touch.clientX < bounds.left || touch.clientX > bounds.right || touch.clientY < bounds.top || touch.clientY > bounds.bottom) {
+          openAtPress.current = undefined;
+          return;
+        }
+        // WebKit can omit click after a cancelled pointerdown. Cancel the
+        // compatibility click here so it cannot hit the newly opened sheet.
+        event.preventDefault();
+        menu.onOpenChange(!openAtPress.current);
+      }}
       onPointerCancel={(event) => {
         openAtPress.current = undefined;
         onPointerCancel?.(event);
@@ -58,7 +72,7 @@ function DropdownMenuTrigger({ onPointerDown, onPointerCancel, onKeyDown, onClic
       }}
       onClick={(event) => {
         onClick?.(event);
-        if (!event.defaultPrevented && narrow && menu && !event.ctrlKey && !props.disabled) {
+        if (!event.defaultPrevented && narrow && menu && !event.ctrlKey && !props.disabled && (event.detail === 0 || openAtPress.current !== undefined)) {
           // Accessibility activation has no pointer press to capture.
           menu.onOpenChange(!(event.detail === 0 ? menu.open : (openAtPress.current ?? menu.open)));
         }

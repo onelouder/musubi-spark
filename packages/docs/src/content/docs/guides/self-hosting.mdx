@@ -28,8 +28,9 @@ task writes; pulling an image is not the whole upgrade procedure.
 The full stack is the default file, so `docker compose up -d` with no `-f` gives
 you the whole thing. API-only is supported and not deprecated — a server whose
 users are all on the mobile app has nothing to gain from shipping a browser
-bundle. The web client currently supports desktop and tablet widths; phone
-browsers show a download gate for the native app.
+bundle. The Musubi Spark web client also opens on phone browsers, using the
+responsive navigation drawer, calendar views and full-screen editors. Native
+apps are optional; all clients connect to the same server.
 
 <Aside type="caution" title="The web client needs one origin">
 The web client and the API **must** share a single public origin. That is what
