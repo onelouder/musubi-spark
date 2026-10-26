@@ -12,6 +12,7 @@ import { Segmented } from "~/components/ui/segmented";
 import { Select } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
 import { Textarea } from "~/components/ui/textarea";
+import { TimePicker } from "~/components/ui/time-picker";
 
 const meta = {
   title: "Design system/Form controls",
@@ -60,6 +61,31 @@ export const Fields: Story = {
         </Field>
       </FieldGroup>
     );
+  },
+};
+
+export const PhoneFields: Story = {
+  globals: { viewport: { isRotated: false, value: "mobile1" } },
+  parameters: { chromatic: { modes: MOBILE_MODES } },
+  render: function Render() {
+    const [time, setTime] = useState("09:30");
+    return (
+      <FieldGroup>
+        <Field label="Location"><Input defaultValue="Studio" /></Field>
+        <InputGroup><InputGroupInput aria-label="Search" placeholder="Search" type="search" /></InputGroup>
+        <Field label="Notes"><Textarea defaultValue="Bring the agenda." /></Field>
+        <TimePicker label="Start time" timeFormat="24h" value={time} variant="inline" onChange={setTime} />
+      </FieldGroup>
+    );
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    for (const label of ["Location", "Search", "Notes", "Start time"]) {
+      const field = canvas.getByLabelText(label);
+      await expect(field).toHaveStyle({ fontSize: "16px" });
+      await userEvent.click(field);
+      await expect(field).toHaveFocus();
+    }
   },
 };
 

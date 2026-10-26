@@ -351,8 +351,6 @@ export function Workspace({
   user,
 }: WorkspaceProps) {
   const anchor = useMemo(() => parseDateKey(date), [date]);
-  const wheelPeriodRef = useWheelPeriod(activeView === "month", offset => changePeriod(offset));
-  const swipePeriod = useSwipePeriod((offset) => changePeriod(offset));
   // Phone chrome has less room for a date label than it has date to spell out.
   const narrow = useNarrowViewport();
   // Direct renders (tests/stories) can own drafts locally. The route passes the
@@ -717,6 +715,9 @@ export function Workspace({
     if (onStepPeriod) onStepPeriod(offset, weeks);
     else onDateChange(toDateKey(view.step(anchor, offset, { weeks })));
   }
+
+  const wheelPeriodRef = useWheelPeriod(activeView === "month", offset => changePeriod(offset));
+  const swipePeriod = useSwipePeriod((offset) => changePeriod(offset));
 
   function removePageDraft(id: string, expected?: PageWorkingDraft) {
     setPageDrafts((current) => {
@@ -1158,6 +1159,7 @@ export function Workspace({
           className={cn(
             "relative min-h-0 min-w-0 flex-1 overflow-auto bg-canvas select-none max-sm:pb-20",
             activeView === "month" && "overflow-hidden overscroll-none",
+            view.swipeable && "touch-pan-y touch-pinch-zoom",
           )}
           ref={wheelPeriodRef}
           data-calendar-area=""

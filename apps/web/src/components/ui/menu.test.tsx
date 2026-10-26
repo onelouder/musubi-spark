@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -33,6 +33,40 @@ function Example({ onChoose }: { onChoose: (value: string) => void }) {
 }
 
 describe("Menu", () => {
+  it("opens on touch release without a click and ignores a later compatibility click", () => {
+    const media = vi.spyOn(window, "matchMedia").mockReturnValue({ ...window.matchMedia(""), matches: true });
+    try {
+      const onChoose = vi.fn();
+      render(<Example onChoose={onChoose} />);
+      const trigger = screen.getByRole("button", { name: "Open page actions" });
+      fireEvent.pointerDown(trigger, { pointerType: "touch", button: 0 });
+      expect(screen.queryByRole("menu")).toBeNull();
+      fireEvent.pointerUp(trigger, { pointerType: "touch", button: 0 });
+      expect(fireEvent.touchEnd(trigger, { changedTouches: [{ clientX: 0, clientY: 0 }] })).toBe(false);
+      expect(screen.getByRole("menu", { name: "Page actions" })).not.toBeNull();
+      fireEvent.click(trigger, { detail: 1 });
+      expect(screen.getByRole("menu", { name: "Page actions" })).not.toBeNull();
+      expect(onChoose).not.toHaveBeenCalled();
+    } finally {
+      media.mockRestore();
+    }
+  });
+
+  it.each(["cancel", "outside"])("does not open after touch %s, including a later click", (release) => {
+    const media = vi.spyOn(window, "matchMedia").mockReturnValue({ ...window.matchMedia(""), matches: true });
+    try {
+      render(<Example onChoose={vi.fn()} />);
+      const trigger = screen.getByRole("button", { name: "Open page actions" });
+      fireEvent.pointerDown(trigger, { pointerType: "touch", button: 0 });
+      if (release === "cancel") fireEvent.pointerCancel(trigger, { pointerType: "touch" });
+      else fireEvent.touchEnd(trigger, { changedTouches: [{ clientX: 100, clientY: 100 }] });
+      fireEvent.click(trigger, { detail: 1 });
+      expect(screen.queryByRole("menu")).toBeNull();
+    } finally {
+      media.mockRestore();
+    }
+  });
+
   it("opens narrow command sheets after the pointer is released", async () => {
     const media = vi.spyOn(window, "matchMedia").mockReturnValue({ ...window.matchMedia(""), matches: true });
     try {

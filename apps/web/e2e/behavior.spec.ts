@@ -19,7 +19,6 @@ async function fixture(page: Page, scenario: InspectorScenario) {
   const requests: { method: string; body: unknown }[] = [];
   const violations: string[] = [];
   const expectedHttpErrors = new Map<string, number>();
-  await page.addInitScript(() => sessionStorage.setItem("musubi-mobile-web-test-bypass", "true"));
   await page.route(url => url.pathname.startsWith("/api/"), async route => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -73,12 +72,13 @@ async function fixture(page: Page, scenario: InspectorScenario) {
   return { requests, violations, expectedHttpErrors, initialTitle: task.title };
 }
 
-async function runStep(page: Page, step: InspectorStep) {
+async function runStep(page: Page, step: InspectorStep, touch: boolean) {
   if (step.action === "fill") await page.getByRole("textbox", { name: step.name, exact: true }).fill(step.value);
   else if (step.action === "expect-value") await expect(page.getByRole("textbox", { name: step.name, exact: true })).toHaveValue(step.value);
   else {
     const target = page.getByRole(step.role, { name: step.name, exact: true });
-    if (step.action === "click") await target.click();
+    if (step.action === "click" && touch) await target.tap();
+    else if (step.action === "click") await target.click();
     else if (step.state === "absent") await expect(target).toHaveCount(0);
     else if (step.state === "visible") await expect(target).toBeVisible();
     else if (step.state === "disabled") await expect(target).toBeDisabled();
@@ -87,40 +87,45 @@ async function runStep(page: Page, step: InspectorStep) {
 }
 
 for (const viewport of [{ name: "desktop", width: 1280, height: 900 }, { name: "narrow", width: 390, height: 844 }]) {
-  for (const scenario of suite.scenarios) {
-    test(`JSON behavior ${scenario.id}: ${viewport.name}`, async ({ page }, testInfo) => {
-      await page.setViewportSize(viewport);
-      await setTestTheme(page, viewport.name === "desktop" ? "light" : "dark");
-      const errors: string[] = [];
-      const consoleErrors: { text: string; url: string }[] = [];
-      page.on("pageerror", error => errors.push(error.message));
-      page.on("console", message => { if (message.type() === "error") consoleErrors.push({ text: message.text(), url: message.location().url }); });
-      const state = await fixture(page, scenario);
-      await page.goto(`/app/p/${pageId}/tasks?date=2026-10-24`);
-      await expect(page).toHaveURL(new RegExp(`/app/p/${pageId}/tasks`));
-      const tasks = page.getByRole("region", { name: "Tasks", exact: true });
-      await expect(tasks).toBeVisible();
-      const row = tasks.getByRole("button").filter({ hasText: state.initialTitle }).first();
-      await expect(row).toBeVisible();
-      await row.click();
-      for (const [index, step] of scenario.steps.entries())
-        await test.step(`${index + 1}: ${step.action}`, () => runStep(page, step));
-      expect(state.violations).toEqual([]);
-      expect(state.requests).toHaveLength(scenario.exchanges.length);
-      for (const [index, exchange] of scenario.exchanges.entries())
-        expect(state.requests[index]).toMatchObject({ method: exchange.method, body: exchange.body });
-      expect(errors).toEqual([]);
-      expect(consoleErrors.filter(error => {
-        const status = state.expectedHttpErrors.get(error.url);
-        return !status || error.text !== `Failed to load resource: the server responded with a status of ${status} (Conflict)`;
-      })).toEqual([]);
-      await expect(page.locator("html")).toHaveAttribute("data-theme", viewport.name === "desktop" ? "light" : "dark");
-      expect(await page.locator("vite-error-overlay").count()).toBe(0);
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-      await page.evaluate(() => document.fonts.ready.then(() => undefined));
-      const screenshot = join(tmpdir(), `musubi-behavior-${scenario.id}-${viewport.name}.png`);
-      await page.screenshot({ path: screenshot, animations: "disabled" });
-      await testInfo.attach("running-app", { path: screenshot, contentType: "image/png" });
-    });
-  }
+  test.describe(viewport.name, () => {
+    const touch = viewport.name === "narrow";
+    test.use({ hasTouch: touch, isMobile: touch });
+    for (const scenario of suite.scenarios) {
+      test(`JSON behavior ${scenario.id}: ${viewport.name}`, async ({ page }, testInfo) => {
+        await page.setViewportSize(viewport);
+        await setTestTheme(page, viewport.name === "desktop" ? "light" : "dark");
+        const errors: string[] = [];
+        const consoleErrors: { text: string; url: string }[] = [];
+        page.on("pageerror", error => errors.push(error.message));
+        page.on("console", message => { if (message.type() === "error") consoleErrors.push({ text: message.text(), url: message.location().url }); });
+        const state = await fixture(page, scenario);
+        await page.goto(`/app/p/${pageId}/tasks?date=2026-10-24`);
+        await expect(page).toHaveURL(new RegExp(`/app/p/${pageId}/tasks`));
+        const tasks = page.getByRole("region", { name: "Tasks", exact: true });
+        await expect(tasks).toBeVisible();
+        const row = tasks.getByRole("button").filter({ hasText: state.initialTitle }).first();
+        await expect(row).toBeVisible();
+        if (touch) await row.tap();
+        else await row.click();
+        for (const [index, step] of scenario.steps.entries())
+          await test.step(`${index + 1}: ${step.action}`, () => runStep(page, step, touch));
+        expect(state.violations).toEqual([]);
+        expect(state.requests).toHaveLength(scenario.exchanges.length);
+        for (const [index, exchange] of scenario.exchanges.entries())
+          expect(state.requests[index]).toMatchObject({ method: exchange.method, body: exchange.body });
+        expect(errors).toEqual([]);
+        expect(consoleErrors.filter(error => {
+          const status = state.expectedHttpErrors.get(error.url);
+          return !status || error.text !== `Failed to load resource: the server responded with a status of ${status} (Conflict)`;
+        })).toEqual([]);
+        await expect(page.locator("html")).toHaveAttribute("data-theme", viewport.name === "desktop" ? "light" : "dark");
+        expect(await page.locator("vite-error-overlay").count()).toBe(0);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        await page.evaluate(() => document.fonts.ready.then(() => undefined));
+        const screenshot = join(tmpdir(), `musubi-behavior-${scenario.id}-${viewport.name}.png`);
+        await page.screenshot({ path: screenshot, animations: "disabled" });
+        await testInfo.attach("running-app", { path: screenshot, contentType: "image/png" });
+      });
+    }
+  });
 }

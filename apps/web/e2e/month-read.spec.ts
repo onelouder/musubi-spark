@@ -374,14 +374,7 @@ async function mockAuthenticatedReads(
 	eventResponse: typeof events = events,
 	calendarResponse: typeof calendars = calendars,
 	failWritesForCalendarId?: string,
-	bypassMobileBlocker = true,
 ) {
-	if (bypassMobileBlocker) {
-		await page.addInitScript(() =>
-			sessionStorage.setItem("musubi-mobile-web-test-bypass", "true"),
-		);
-	}
-
 	let authenticated = true;
 	let settingsState = { ...settings };
 	let settingsRevision = 1;
@@ -4323,28 +4316,90 @@ test("says an event is unsettled while its write is in flight", async ({
 	await expect(block).not.toHaveAttribute("data-pending", "");
 });
 
-test("blocks the phone web app with a full-screen app download", async ({
-	page,
-}) => {
-	await page.setViewportSize({ height: 720, width: 390 });
-	await mockAuthenticatedReads(page, events, calendars, undefined, false);
-	await page.goto(`/app/p/${DEFAULT_PAGE_ID}/month?date=2026-07-26`);
+test.describe("phone web", () => {
+  test.use({ hasTouch: true, isMobile: true });
 
-	const blocker = page.getByRole("dialog", { name: "Musubi on mobile" });
-	await expect(blocker).toContainText("Musubi works best in the app");
-	await expect(
-		blocker.getByRole("button", { name: "Get the Android app" }),
-	).toBeVisible();
-	const box = (await blocker.locator("..").boundingBox())!;
-	expect(box).toMatchObject({ height: 720, width: 390, x: 0, y: 0 });
-	await expect(
-		page.getByRole("button", { name: "Create event, meeting or task", exact: true }),
-	).toHaveCount(0);
+  async function swipe(page: Page, from: { x: number; y: number }, to: { x: number; y: number }) {
+    const cdp = await page.context().newCDPSession(page);
+    const point = (x: number, y: number) => ({ x, y, id: 1, radiusX: 4, radiusY: 4, force: 1 });
+    try {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point(from.x, from.y)] });
+      for (const fraction of [0.25, 0.5, 0.75, 1]) {
+        await cdp.send("Input.dispatchTouchEvent", {
+          type: "touchMove",
+          touchPoints: [point(from.x + (to.x - from.x) * fraction, from.y + (to.y - from.y) * fraction)],
+        });
+      }
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    } finally {
+      await cdp.detach();
+    }
+  }
 
-	await page.keyboard.press("Escape");
-	await expect(blocker).toBeVisible();
-	await page.reload();
-	await expect(blocker).toBeVisible();
+  test("pages by native touch swipe while retaining vertical day scrolling", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await mockAuthenticatedReads(page, { ...events, events: [] });
+    await page.goto(`/app/p/${DEFAULT_PAGE_ID}/month?date=2026-07-26`);
+    const calendar = page.locator("[data-calendar-area]");
+    await expect(calendar).toBeVisible();
+    await settleLayout(page);
+    const month = (await calendar.boundingBox())!;
+    await swipe(page, { x: 260, y: month.y + 220 }, { x: 100, y: month.y + 220 });
+    await expect(page).toHaveURL(/date=2026-08-01/);
+    await expect(page.getByRole("dialog", { name: "Create event" })).toHaveCount(0);
+    await chooseSelectOption(page, "Calendar view", "Day");
+    await expect(page.locator("[data-time-grid-column]")).toHaveCount(1);
+    await calendar.evaluate(element => { element.scrollTop = 0; });
+    const day = (await calendar.boundingBox())!;
+    await swipe(page, { x: 200, y: day.y + 300 }, { x: 200, y: day.y + 100 });
+    await expect.poll(() => calendar.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+    await expect(page).toHaveURL(/day\?date=2026-08-01/);
+    await expect(page.getByRole("dialog", { name: "Create event" })).toHaveCount(0);
+  });
+
+  test("preserves sign-in redirects for phone calendar links", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.route("**/api/auth/get-session", route => respond(route, null));
+    await page.goto(`/app/p/${DEFAULT_PAGE_ID}/agenda?date=2026-07-26`);
+    await expect(page).toHaveURL(/\/login\?redirect=/);
+    await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Musubi on mobile" })).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  });
+
+  for (const [width, theme] of [[320, "light"], [390, "dark"], [430, "light"]] as const) {
+    test(`opens and navigates the calendar without a bypass at ${width}px`, async ({ page }, testInfo) => {
+      const errors: string[] = [];
+      page.on("pageerror", error => errors.push(error.message));
+      page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
+      await page.setViewportSize({ width, height: 844 });
+      await setTestTheme(page, theme);
+      await mockAuthenticatedReads(page);
+      await page.goto(`/app/p/${DEFAULT_PAGE_ID}/month?date=2026-07-26`);
+      for (const view of ["Month", "Week", "Day", "Agenda", "Tasks"]) {
+        const picker = page.getByRole("combobox", { name: "Calendar view" });
+        await picker.tap();
+        await page.getByRole("option", { name: view, exact: true }).tap();
+        await expect(page).toHaveURL(new RegExp(`/app/p/${DEFAULT_PAGE_ID}/${view.toLowerCase()}\\?date=2026-07-26`));
+        await expect(picker).toContainText(view);
+        await expect(page.getByRole("button", { name: "Create event, meeting or task", exact: true })).toBeInViewport();
+        await expect(page.getByRole("dialog", { name: "Musubi on mobile" })).toHaveCount(0);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        if (view === "Month") await page.screenshot({ path: testInfo.outputPath(`phone-month-${width}.png`) });
+      }
+      await page.getByRole("button", { name: "Open navigation" }).tap();
+      const navigation = page.getByRole("complementary", { name: "Workspace navigation" });
+      await expect(navigation).toBeVisible();
+      await navigation.getByRole("button", { name: "Close navigation" }).tap();
+      await page.reload();
+      await expect(page.getByRole("region", { name: "Tasks", exact: true })).toBeVisible();
+      await expectNoAccessibilityViolations(page);
+      await expect(page.locator("vite-error-overlay")).toHaveCount(0);
+      expect(errors).toEqual([]);
+      await page.screenshot({ path: testInfo.outputPath(`phone-web-${width}.png`) });
+    });
+  }
 });
 
 // Each route has its own bounded test budget. A sequence of five full Vite

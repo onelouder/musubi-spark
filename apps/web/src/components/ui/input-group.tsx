@@ -43,7 +43,7 @@ function InputGroupInput({ className, ...props }: React.ComponentProps<"input">)
     <input
       data-slot="input-group-control"
       className={cn(
-        "h-full min-w-0 flex-1 border-0 bg-transparent px-3 text-14 text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
+        "h-full min-w-0 flex-1 border-0 bg-transparent px-3 text-14 max-sm:text-16 text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
         className,
       )}
       {...props}

@@ -7,7 +7,7 @@ const inputVariants = cva(
   {
     variants: {
       variant: {
-        default: "h-control rounded-control border border-border bg-raised px-3 text-14 hover:border-border-strong focus-visible:border-border-strong",
+        default: "h-control rounded-control border border-border bg-raised px-3 text-14 max-sm:text-16 hover:border-border-strong focus-visible:border-border-strong",
         title: "h-auto rounded-sm border-0 bg-transparent px-0 py-1 font-serif text-22 leading-snug",
       },
     },

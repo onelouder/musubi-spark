@@ -341,7 +341,7 @@ export function TimePicker({
             className={cn(
               variant === "field"
                 ? cn(inputClassName, "pr-8")
-                : "h-control w-full min-w-0 rounded-sm border-0 bg-transparent pr-6 text-12 text-foreground-secondary placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:text-shu",
+                : "h-control w-full min-w-0 rounded-sm border-0 bg-transparent pr-6 text-12 max-sm:text-16 text-foreground-secondary placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:text-shu",
             )}
             disabled={disabled}
             inputMode="numeric"
