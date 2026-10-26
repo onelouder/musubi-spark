@@ -49,6 +49,7 @@ async function main() {
     await pool.query('insert into user_settings(id,last_seen_announcement,theme,revision) values ($1,$2,$3,4)', [futureReader, "2026-10-06", "light"]);
     const originalAnnouncements = (await pool.query('select * from announcements order by id')).rows;
     const originalSettings = (await pool.query('select * from user_settings order by id')).rows;
+    const expectedSettings = originalSettings.map(row => ({ ...row, default_event_calendar_id: null }));
 
     await migrate(drizzle(pool), { migrationsFolder: migrations });
     const migratedAnnouncements = (await pool.query('select * from announcements order by id')).rows;
@@ -62,7 +63,7 @@ async function main() {
       assert.ok(releaseAnnouncement.id > id, `A reader at ${id} must see the new release announcement under client lexical ordering`);
     assert.deepEqual(migratedAnnouncements.filter(row => row.id !== releaseAnnouncement.id), originalAnnouncements,
       "The release preserves existing admin and previous release announcements without overwriting their text or timestamps");
-    assert.deepEqual((await pool.query('select * from user_settings order by id')).rows, originalSettings,
+    assert.deepEqual((await pool.query('select * from user_settings order by id')).rows, expectedSettings,
       "The release keeps read markers, preference values and settings revisions, including a future read marker");
     assert.ok(releaseAnnouncement.id > originalSettings.find(row => row.id === owner).last_seen_announcement,
       "The 0.2.2 announcement is visible after the highest existing same-day read marker");
@@ -73,7 +74,7 @@ async function main() {
     await migrate(drizzle(pool), { migrationsFolder: migrations });
     assert.deepEqual((await pool.query('select * from announcements order by id')).rows, migratedAnnouncements,
       "Restarting the release migrator never inserts a second announcement");
-    assert.deepEqual((await pool.query('select * from user_settings order by id')).rows, originalSettings,
+    assert.deepEqual((await pool.query('select * from user_settings order by id')).rows, expectedSettings,
       "Repeated migration never resets announcement read markers or preferences");
     assert.deepEqual((await pool.query('select * from drizzle.__drizzle_migrations order by created_at')).rows, migratedJournal,
       "Repeated migration leaves the release journal unchanged");

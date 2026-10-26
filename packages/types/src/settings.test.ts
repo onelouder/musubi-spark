@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { SettingsPatchSchema } from "./settings";
+import { SettingsPatchSchema, SettingsSchema } from "./settings";
 
 // A phone updates from a store; a self-hosted server updates when its admin
 // gets round to it. So a client newer than its server is the ordinary case, and
@@ -64,6 +64,31 @@ import { SettingsPatchSchema } from "./settings";
     SettingsPatchSchema.parse({ lastSeenAnnouncement: "" }).lastSeenAnnouncement,
     "",
   );
+}
+
+{
+  const legacy = {
+    notificationsOnByDefault: true,
+    defaultCalendarView: "month",
+    weekStartsOn: "monday",
+    timeFormat: "24h",
+    dateFormat: "dmy",
+  };
+  for (const [schema, base] of [
+    [SettingsSchema, legacy],
+    [SettingsPatchSchema, { theme: "dark" }],
+  ] as const) {
+    assert.equal(Object.hasOwn(schema.parse(base), "defaultEventCalendarId"), false);
+    for (const value of ["shared-calendar", null]) {
+      assert.equal(schema.parse({ ...base, defaultEventCalendarId: value }).defaultEventCalendarId, value);
+    }
+    for (const value of [false, 42, [], {}]) {
+      assert.equal(schema.safeParse({ ...base, defaultEventCalendarId: value }).success, false);
+    }
+  }
+  assert.deepEqual(SettingsPatchSchema.parse({ defaultEventCalendarId: null }), {
+    defaultEventCalendarId: null,
+  });
 }
 
 console.log("settings.test.ts ok");

@@ -132,6 +132,25 @@ export const General: Story = {
     const insets = getComputedStyle(body);
     expect(panel.getBoundingClientRect().right).toBeCloseTo(bounds.right - parseFloat(insets.paddingRight), 0);
     expect(panel.getBoundingClientRect().left).toBeCloseTo(bounds.left + parseFloat(insets.paddingLeft), 0);
+    const defaultCalendar = dialog.getByRole("combobox", { name: "Default event calendar" });
+    expect(defaultCalendar).toHaveTextContent("Automatic");
+    await userEvent.click(defaultCalendar);
+    await userEvent.click(await screen.findByRole("option", { name: "Family" }));
+    await waitFor(() => expect(defaultCalendar).toHaveAttribute("aria-expanded", "false"));
+    await waitFor(() => expect(defaultCalendar).toBeEnabled());
+    expect(defaultCalendar).toHaveTextContent("Family");
+    await waitFor(() => expect(defaultCalendar).toHaveFocus());
+    await userEvent.keyboard("{ArrowDown}");
+    const options = await screen.findByRole("listbox", { name: "Default event calendar options" });
+    await waitFor(() => expect(options).toBeVisible());
+    await waitFor(() => expect(within(options).getByRole("option", { name: "Family" })).toHaveFocus());
+    await userEvent.keyboard("{Home}");
+    await waitFor(() => expect(within(options).getByRole("option", { name: "Automatic" })).toHaveFocus());
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(defaultCalendar).toHaveAttribute("aria-expanded", "false"));
+    await waitFor(() => expect(defaultCalendar).toBeEnabled());
+    await waitFor(() => expect(defaultCalendar).toHaveTextContent("Automatic"));
+    await waitFor(() => expect(defaultCalendar).toHaveFocus());
   },
 };
 

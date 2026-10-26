@@ -85,6 +85,88 @@ const panelProps = {
   onCreated: vi.fn(), open: true, timeFormat: "24h" as const, userId: "alex", weekStartsOn: "monday" as const,
 };
 
+it("creates in the preferred shared calendar as both home and sole membership", async () => {
+  const user = userEvent.setup();
+  const onCreate = vi.fn(async event => event);
+  render(<QuickCreate {...panelProps} defaultEventCalendarId="studio" onCreate={onCreate} onOpenChange={vi.fn()} />);
+  expect(screen.getByRole("button", { name: "Choose calendars. Studio is home. Event appears in 1 calendar." })).toBeTruthy();
+  await user.type(screen.getByRole("textbox", { name: "Event title" }), "Shared plan");
+  await user.click(screen.getByRole("button", { name: "Create" }));
+  expect(onCreate).toHaveBeenCalledOnce();
+  expect(onCreate.mock.calls[0]![0]).toMatchObject({
+    title: "Shared plan", originCalendarID: "studio", calendars: ["studio"], color: fixtureCalendars[1]!.color,
+  });
+});
+
+it("overrides the shared default with only the private home calendar for this event", async () => {
+  const user = userEvent.setup();
+  const onCreate = vi.fn(async event => event);
+  render(<QuickCreate {...panelProps} defaultEventCalendarId="studio" onCreate={onCreate} onOpenChange={vi.fn()} />);
+  await user.type(screen.getByRole("textbox", { name: "Event title" }), "Private appointment");
+  await user.click(screen.getByRole("button", { name: /^Choose calendars/ }));
+  await user.click(screen.getByRole("radio", { name: "Personal as home calendar" }));
+  expect((screen.getByRole("checkbox", { name: "Show event in Studio" }) as HTMLInputElement).checked).toBe(false);
+  await user.click(screen.getByRole("button", { name: "Create" }));
+  expect(onCreate).toHaveBeenCalledOnce();
+  expect(onCreate.mock.calls[0]![0]).toMatchObject({
+    title: "Private appointment", originCalendarID: "personal", calendars: ["personal"], color: fixtureCalendars[0]!.color,
+  });
+});
+
+it.each([
+  { label: "missing", preferredId: "deleted" },
+  { label: "read-only", preferredId: "read-only" },
+  { label: "task-only", preferredId: "tasks" },
+  { label: "unset", preferredId: undefined },
+  { label: "automatic", preferredId: null },
+])("falls back to Personal for a $label preference", async ({ preferredId }) => {
+  const user = userEvent.setup();
+  const onCreate = vi.fn(async event => event);
+  const calendars = [
+    { ...fixtureCalendars[1]!, id: "read-only", role: "viewer" },
+    { ...fixtureCalendars[1]!, id: "tasks", supportsEvents: false, supportsTasks: true },
+    fixtureCalendars[1]!, fixtureCalendars[0]!,
+  ];
+  render(<QuickCreate {...panelProps} calendars={calendars} defaultEventCalendarId={preferredId} onCreate={onCreate} onOpenChange={vi.fn()} />);
+  await user.type(screen.getByRole("textbox", { name: "Event title" }), "Fallback plan");
+  await user.click(screen.getByRole("button", { name: "Create" }));
+  expect(onCreate).toHaveBeenCalledOnce();
+  expect(onCreate.mock.calls[0]![0]).toMatchObject({ originCalendarID: "personal", calendars: ["personal"] });
+});
+
+it.each([
+  { label: "read-only", role: "viewer", supportsEvents: true },
+  { label: "task-only", role: "owner", supportsEvents: false },
+])("uses the first writable event calendar when Personal is $label", async ({ role, supportsEvents }) => {
+  const user = userEvent.setup();
+  const onCreate = vi.fn(async event => event);
+  const calendars = [{ ...fixtureCalendars[0]!, role, supportsEvents }, fixtureCalendars[1]!];
+  render(<QuickCreate {...panelProps} calendars={calendars} defaultEventCalendarId="personal" onCreate={onCreate} onOpenChange={vi.fn()} />);
+  await user.type(screen.getByRole("textbox", { name: "Event title" }), "Writable fallback");
+  await user.click(screen.getByRole("button", { name: "Create" }));
+  expect(onCreate).toHaveBeenCalledOnce();
+  expect(onCreate.mock.calls[0]![0]).toMatchObject({ originCalendarID: "studio", calendars: ["studio"] });
+});
+
+it.each(["studio", "personal"])("keeps a mounted %s draft when the preference changes", async (homeId) => {
+  const user = userEvent.setup();
+  const onCreate = vi.fn(async event => event);
+  const props = { ...panelProps, onCreate, onOpenChange: vi.fn() };
+  const view = render(<QuickCreate {...props} defaultEventCalendarId="studio" />);
+  await user.type(screen.getByRole("textbox", { name: "Event title" }), "Draft in progress");
+  await user.type(screen.getByPlaceholderText("Add location"), "Studio B");
+  if (homeId === "personal") {
+    await user.click(screen.getByRole("button", { name: /^Choose calendars/ }));
+    await user.click(screen.getByRole("radio", { name: "Personal as home calendar" }));
+  }
+  view.rerender(<QuickCreate {...props} defaultEventCalendarId="family-calendar" />);
+  await user.click(screen.getByRole("button", { name: "Create" }));
+  expect(onCreate).toHaveBeenCalledOnce();
+  expect(onCreate.mock.calls[0]![0]).toMatchObject({
+    title: "Draft in progress", location: "Studio B", originCalendarID: homeId, calendars: [homeId],
+  });
+});
+
 it("keeps a new event draft through Escape until discard is confirmed", async () => {
   const user = userEvent.setup();
   const onOpenChange = vi.fn();

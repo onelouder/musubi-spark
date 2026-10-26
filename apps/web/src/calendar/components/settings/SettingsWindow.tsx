@@ -134,7 +134,7 @@ function SettingsWindowContent({
   function panel(id: SettingsSectionId) {
     switch (id) {
       case "general":
-        return <GeneralPanel document={document} reminders={reminders} />;
+        return <GeneralPanel calendars={calendars} document={document} reminders={reminders} />;
       case "calendars":
         return (
           <CalendarsPanel

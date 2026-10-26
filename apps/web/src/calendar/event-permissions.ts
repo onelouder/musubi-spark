@@ -15,6 +15,13 @@ export function getEditableCalendars(calendars: Calendar[]) {
   );
 }
 
+export function getDefaultEventCalendar(calendars: Calendar[], preferredId?: string | null) {
+  const editable = getEditableCalendars(calendars);
+  return editable.find(calendar => calendar.id === preferredId)
+    ?? editable.find(calendar => calendar.isDefault)
+    ?? editable[0];
+}
+
 export function getEditableTaskCalendars(calendars: Calendar[]) {
   return calendars.filter(
     (calendar) =>
