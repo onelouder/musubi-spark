@@ -33,7 +33,7 @@ import { assertTaskEtag, assertTaskMutationResponse, assertTaskReadResponse, Pro
 import { observedProviderFetch, observedProviderRequest } from "../provider_http_metrics";
 import { getOAuthAccessToken } from "../oauth";
 import { assertCompleteEventReadResponse, assertCreatedEventEvidence, eventCreateOperationID, googleEventCreateID } from "../event_create_identity";
-import { isOptionalTaskError, ProviderAuthError, TaskScopeMissingError } from "../errors";
+import { GoogleSeriesMasterUnavailableError, isOptionalTaskError, ProviderAuthError, TaskScopeMissingError } from "../errors";
 import {
   assertEventWriteEvidence,
   assertEventWriteResponse,
@@ -594,6 +594,7 @@ export async function fetchGoogleChanges(
   let currentCursor = cursor;
   let pageToken: string | undefined;
   let nextSyncToken: string | undefined;
+  let calendarTimeZone: string | undefined;
   let reset = options.timeModels === true && cursor === null;
   let done = false;
 
@@ -617,11 +618,17 @@ export async function fetchGoogleChanges(
       pageToken = undefined;
       changes.length = 0;
       items.length = 0;
+      calendarTimeZone = undefined;
       continue;
     }
     if (!res.ok) throw new Error(`Google ${res.status} ${res.statusText}`);
 
     const data = await res.json();
+    if (typeof data.timeZone === "string") {
+      if (calendarTimeZone !== undefined && calendarTimeZone !== data.timeZone)
+        throw new Error("Google calendar time zone changed during pagination.");
+      calendarTimeZone = data.timeZone;
+    }
     for (const item of data.items ?? []) {
       items.push(item);
       if (item && typeof item === "object" && typeof data.accessRole === "string") observedRoles.set(item, data.accessRole);
@@ -640,6 +647,7 @@ export async function fetchGoogleChanges(
     for (const item of items) {
       if (!item.recurringEventId || masters.has(item.recurringEventId)) continue;
       const response = await fetchImpl(`${baseUrl}/calendars/${encodeURIComponent(externalCalendarId)}/events/${encodeURIComponent(item.recurringEventId)}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (response.status === 404) throw new GoogleSeriesMasterUnavailableError();
       if (!response.ok) throw new Error(`Google series hydration ${response.status}`);
       const master = await response.json();
       if (master.id !== item.recurringEventId) throw new Error("Google series hydration returned another identity.");
@@ -647,7 +655,7 @@ export async function fetchGoogleChanges(
       items.push(master);
     }
   }
-  for (const item of items.filter(item => !options.timeModels || !item.recurringEventId || masters.get(item.recurringEventId)?.status !== "cancelled")) changes.push({ kind: "event", data: options.timeModels ? normalizeGoogleTime(item, toNormalized({ ...item, recurrence: undefined }, observedRoles.get(item)), masters.get(item.recurringEventId)) : toNormalized(item, observedRoles.get(item)) });
+  for (const item of items.filter(item => !options.timeModels || !item.recurringEventId || masters.get(item.recurringEventId)?.status !== "cancelled")) changes.push({ kind: "event", data: options.timeModels ? normalizeGoogleTime(item, toNormalized({ ...item, recurrence: undefined }, observedRoles.get(item)), masters.get(item.recurringEventId), calendarTimeZone) : toNormalized(item, observedRoles.get(item)) });
   if (options.organizerTimeEventIDs?.size && !options.timeModels) {
     for (const change of changes) {
       if (change.kind !== "event") continue;

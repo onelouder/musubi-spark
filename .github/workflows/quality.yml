@@ -316,7 +316,7 @@ jobs:
   integration:
     name: Database integration (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:

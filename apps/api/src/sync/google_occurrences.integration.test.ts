@@ -6,8 +6,65 @@ import { config } from "@musubi/config";
 import { account, db, events, externalEvents, calendarEvents, eventOutbox, importExternalCalendar, upsertExternalEvent, getUsersEvents, getUserExternalCalendars, user } from "@musubi/db";
 import { EventSchema } from "@musubi/types";
 import { expandRecurringEvents } from "@musubi/calendar";
-import { googleAdapter } from "./adapters/google";
+import { fetchGoogleChanges, googleAdapter } from "./adapters/google";
 import { syncProvider } from "./engine";
+import { ProviderAuthError } from "./errors";
+import type { CalendarAdapter } from "./adapter";
+
+async function verifyCalendarIsolation() {
+  const userID = `google-isolation-${randomUUID()}`;
+  const native = { id: "event", summary: "Original", start: { date: "2026-03-28" }, end: { date: "2026-03-29" } };
+  const fetched: string[] = [];
+  let mode = "baseline";
+  const adapter: CalendarAdapter = {
+    ...googleAdapter,
+    async listCalendars() {
+      return { calendars: ["first", "second"].map(externalId => ({ externalId, name: externalId, color: "#7A8BA3", googleAccessRole: "owner" as const })), taskListsComplete: true };
+    },
+    async fetchChanges(_userID, _accountID, externalID, cursor) {
+      fetched.push(externalID);
+      const failing = mode !== "baseline" && fetched.length === 1;
+      if (failing && mode === "auth") throw new ProviderAuthError("google", "resource_401", undefined, true);
+      if (failing && mode === "unknown") throw new Error("Unclassified calendar failure");
+      return fetchGoogleChanges("fixture", externalID, cursor, { timeModels: true, fetchImpl: async input => {
+        const path = new URL(String(input)).pathname;
+        if (failing && mode === "grant") return Response.json({}, { status: 403 });
+        if (path.endsWith("/missing")) return Response.json({}, { status: 404 });
+        const item = failing ? { ...native, recurringEventId: "missing", originalStartTime: native.start } : { ...native, summary: mode };
+        return Response.json({ items: [item], nextSyncToken: mode });
+      } });
+    },
+  };
+  await db.insert(user).values({ id: userID, name: "Isolation", email: `${userID}@example.test` });
+  const sync = () => syncProvider(adapter, userID, { id: "account", label: "Fixture" });
+  const links = () => getUserExternalCalendars("google", userID, "account");
+  try {
+    await sync();
+    const before = await db.select().from(events).where(eq(events.creatorID, userID));
+    mode = "missing";
+    fetched.length = 0;
+    await assert.rejects(sync(), /Google series hydration 404/);
+    assert.equal(fetched.length, 2, "A missing master cannot prevent a healthy calendar from syncing");
+    const after = await links();
+    const failed = after.find(link => link.externalCalendarID === fetched[0])!;
+    const healthy = after.find(link => link.externalCalendarID === fetched[1])!;
+    assert.equal(failed.cursor, "baseline", "An incomplete calendar retains its checkpoint");
+    assert.equal(healthy.cursor, "missing", "Only the completed calendar advances its checkpoint");
+    const stored = await db.select().from(events).where(eq(events.creatorID, userID));
+    assert.deepEqual(stored.find(event => event.originCalendarID === failed.calendarID), before.find(event => event.originCalendarID === failed.calendarID), "A failed read cannot sweep or replace existing events");
+    assert.equal(stored.find(event => event.originCalendarID === healthy.calendarID)!.title, "missing");
+    for (const failure of ["auth", "grant", "unknown"]) {
+      mode = failure;
+      fetched.length = 0;
+      const cursors = await links();
+      await assert.rejects(sync(), failure === "auth" ? ProviderAuthError : Error);
+      assert.equal(fetched.length, 1, `${failure} failures still stop the account immediately`);
+      assert.deepEqual(await links(), cursors);
+    }
+  } finally {
+    await db.delete(user).where(eq(user.id, userID));
+  }
+}
 
 async function main() {
   assert.equal(process.env.ENVIRONMENT, "test");
@@ -130,4 +187,4 @@ async function main() {
   }
   console.log("Google occurrence hydration, cancellation, reset and stable DB identity: OK");
 }
-main().finally(() => db.$client.end());
+main().then(verifyCalendarIsolation).finally(() => db.$client.end());
