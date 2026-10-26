@@ -1,0 +1,1 @@
+ALTER TABLE "user_settings" ADD COLUMN "default_event_calendar_id" text;

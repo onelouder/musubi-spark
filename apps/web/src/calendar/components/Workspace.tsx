@@ -1440,6 +1440,7 @@ export function Workspace({
         <QuickCreate
           anchor={createIntent.anchor}
           calendars={editableCalendars}
+          defaultEventCalendarId={settings.defaultEventCalendarId}
           date={createIntent.date}
           email={user.email}
           userName={user.name}

@@ -191,6 +191,8 @@ export const userSettings = pgTable("user_settings", {
     .notNull()
     .default(true),
   defaultCalendarView: text("default_calendar_view").notNull().default("month"),
+  // A remembered choice, not a membership or permission grant.
+  defaultEventCalendarId: text("default_event_calendar_id"),
   weekStartsOn: text("week_starts_on").notNull().default("monday"),
   timeFormat: text("time_format").notNull().default("24h"),
   dateFormat: text("date_format").notNull().default("dmy"),

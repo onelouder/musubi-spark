@@ -6,9 +6,11 @@ import {
   timedValue,
   withAllDay,
   withTimed,
+  type Calendar,
   type ReminderRule,
 } from "@musubi/types";
 import { useState } from "react";
+import { getEditableCalendars } from "~/calendar/event-permissions";
 import type { ReminderControl } from "~/calendar/reminder-control";
 import { Button } from "~/components/ui/button";
 import { InlineError } from "~/components/ui/inline-error";
@@ -54,13 +56,14 @@ const DATE_FORMAT_OPTIONS = [
 ] as const;
 
 export type GeneralPanelProps = {
+  calendars: Calendar[];
   document: SettingsDocumentState;
   /** Only for the push toggle here — a calendar's own rule lives on the calendar. */
   reminders?: ReminderControl;
 };
 
 /** Appearance, date and time, reminders and email: the synced preferences. */
-export function GeneralPanel({ document, reminders }: GeneralPanelProps) {
+export function GeneralPanel({ calendars, document, reminders }: GeneralPanelProps) {
   const { error, loadFailed, retry, save, saving, settings } = document;
   const [inspectorPresentation, setInspectorPresentation] = useInspectorPreference();
   const [layoutError, setLayoutError] = useState("");
@@ -107,6 +110,15 @@ export function GeneralPanel({ document, reminders }: GeneralPanelProps) {
   // document that predates the field still gives the control something to show.
   const defaultReminder = settings.value.defaultReminder ?? DEFAULT_REMINDER_RULE;
   const notificationEmails = settings.value.notificationEmails ?? DEFAULT_NOTIFICATION_EMAILS;
+  const editableCalendars = getEditableCalendars(calendars);
+  const preferredId = settings.value.defaultEventCalendarId;
+  const calendarOptions = [
+    { label: "Automatic", value: "" },
+    ...editableCalendars.map(calendar => ({ label: calendar.name, value: calendar.id })),
+  ];
+  if (preferredId && !editableCalendars.some(calendar => calendar.id === preferredId)) {
+    calendarOptions.push({ label: "Unavailable calendar", value: preferredId });
+  }
   const saveDefaultReminder = (rule: ReminderRule) => save({ defaultReminder: rule });
 
   return (
@@ -146,6 +158,23 @@ export function GeneralPanel({ document, reminders }: GeneralPanelProps) {
         />
       </SettingsSection>
       {layoutError ? <InlineError>{layoutError}</InlineError> : null}
+
+      <SettingsSection title="New events" help="New events start in this calendar. You can choose a different calendar in the event editor. Automatic uses your Personal calendar when available.">
+        <Row
+          label="Default calendar"
+          layout="responsive-actions"
+          trailing={
+            <Select
+              disabled={saving}
+              label="Default event calendar"
+              options={calendarOptions}
+              size="compact"
+              value={preferredId ?? ""}
+              onChange={value => void save({ defaultEventCalendarId: value || null })}
+            />
+          }
+        />
+      </SettingsSection>
 
       <SettingsSection title="Date & time">
         <RowOptions

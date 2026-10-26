@@ -28,6 +28,8 @@ export const TimezoneSchema = z
 export const SettingsSchema = z.object({
   notificationsOnByDefault: z.boolean(),
   defaultCalendarView: CalendarViewSchema,
+  // Creation preference only; omission preserves it and null clears it.
+  defaultEventCalendarId: z.string().nullable().optional(),
   weekStartsOn: z.enum(["monday", "sunday"]),
   // how times render (12-hour with AM/PM vs 24-hour) and the order dates are written
   timeFormat: z.enum(["12h", "24h"]),
@@ -63,6 +65,7 @@ export const SettingsPatchSchema = z
     calendarOrder: z.array(z.string()).max(500).optional(),
     dateFormat: z.enum(["dmy", "mdy", "ymd"]).optional(),
     defaultCalendarView: CalendarViewSchema.optional(),
+    defaultEventCalendarId: z.string().nullable().optional(),
     defaultReminder: ReminderRuleSchema.optional(),
     lastSeenAnnouncement: z.string().max(64).optional(),
     notificationEmails: NotificationEmailsSchema.optional(),

@@ -16,7 +16,7 @@ import {
   type ExactEventRange,
 } from "../event-form";
 import { toDateKey } from "../date-key";
-import { getEventMutationError } from "../event-permissions";
+import { getDefaultEventCalendar, getEventMutationError } from "../event-permissions";
 import { type EventWhen, EventEditorForm } from "./EventEditorForm";
 import { PanelHeader, PanelTitle } from "./EventPanel";
 
@@ -30,6 +30,7 @@ type QuickCreateProps = {
   anchor: QuickCreateAnchor;
   calendars: Calendar[];
   date: string;
+  defaultEventCalendarId?: string | null;
   email: string;
   onCreate: (event: Event) => Promise<Event>;
   /** Keeps the block on the grid in step with the fields describing it. */
@@ -53,6 +54,7 @@ export function QuickCreate({
   anchor,
   calendars,
   date,
+  defaultEventCalendarId,
   email,
   onCreate,
   onDraftChange,
@@ -78,8 +80,7 @@ export function QuickCreate({
   const [draft, setDraft] = useState<EventFormValues>();
   const [submissionState, setSubmissionState] = useState<{ saving: boolean; error?: ReturnType<typeof getEventMutationError> }>({ saving: false });
   const [discardAction, setDiscardAction] = useState<(() => void)>();
-  const defaultCalendar =
-    calendars.find((calendar) => calendar.isDefault) ?? calendars[0];
+  const defaultCalendar = getDefaultEventCalendar(calendars, defaultEventCalendarId);
   const whenValues = defaultEventFormValues(
     defaultCalendar?.id ?? "",
     date,

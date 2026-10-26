@@ -7,6 +7,7 @@ const settings = {
   createdAt: new Date("2026-07-26T10:00:00.000Z"),
   dateFormat: "dmy",
   defaultCalendarView: "month",
+  defaultEventCalendarId: "shared-calendar",
   id: "user-1",
   defaultReminder: {
     minutesBefore: 10,
@@ -70,6 +71,7 @@ async function run() {
           calendarOrder: [],
           dateFormat: "dmy",
           defaultCalendarView: "month",
+          defaultEventCalendarId: "shared-calendar",
           defaultReminder: settings.defaultReminder,
           lastSeenAnnouncement: settings.lastSeenAnnouncement,
           notificationEmails: settings.notificationEmails,
@@ -114,6 +116,28 @@ async function run() {
     assert.deepEqual(notifications, [
       [["user-1"], "settings_updated", { revision: 5 }],
     ]);
+  }
+
+  for (const defaultEventCalendarId of ["another-calendar", null]) {
+    const { response, result } = responseRecorder();
+    const handler = createPatchSettingsHandler({
+      notify: () => undefined,
+      patch: async (userID, revision, patch) => {
+        assert.equal(userID, "user-1");
+        assert.equal(revision, 4);
+        assert.deepEqual(patch, { defaultEventCalendarId });
+        return { conflict: false, settings: { ...settings, defaultEventCalendarId, revision: 5 } };
+      },
+    });
+    await handler({
+      body: { baseRevision: 4, patch: { defaultEventCalendarId } },
+      user: { id: "user-1" },
+    } as Request, response);
+    assert.equal(result().statusCode, 200);
+    assert.equal(
+      (result().payload as { value: { defaultEventCalendarId: string | null } }).value.defaultEventCalendarId,
+      defaultEventCalendarId,
+    );
   }
 
   await assert.rejects(

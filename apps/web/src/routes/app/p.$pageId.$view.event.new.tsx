@@ -16,6 +16,7 @@ import {
 } from "~/calendar/event-form";
 import { useEventMutations } from "~/calendar/event-mutations";
 import {
+  getDefaultEventCalendar,
   getEditableCalendars,
   getEventMutationError,
 } from "~/calendar/event-permissions";
@@ -118,8 +119,7 @@ function NewEventForm({
   titleRef,
   user,
 }: NewEventFormProps) {
-  const fallback =
-    calendars.find((calendar) => calendar.isDefault) ?? calendars[0]!;
+  const fallback = getDefaultEventCalendar(calendars, settings?.defaultEventCalendarId)!;
   const home =
     calendars.find((calendar) => calendar.id === search.calendarId) ?? fallback;
   const base = defaultEventFormValues(home.id, date, search.startTime, {
