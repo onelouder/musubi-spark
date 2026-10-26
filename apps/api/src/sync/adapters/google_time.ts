@@ -21,8 +21,19 @@ function original(value: GoogleTime, zone?: string): OccurrenceStart {
   return OccurrenceStartSchema.parse(value.date ? { kind: "date", value: value.date } : { kind: "instant", value: instant(value, zone).toISOString() });
 }
 
+function recurrence(lines: string[] | undefined, isAllDay: boolean, calendarTimeZone?: string): string | null {
+  if (!lines) return null;
+  if (!isAllDay || calendarTimeZone !== "UTC") return lines.join("\n");
+  // Legacy Google all-day rules can carry a UTC date-time cutoff. In an
+  // explicitly UTC calendar its inclusive date is unambiguous; other zones
+  // still require evidence before changing the provider's recurrence boundary.
+  return lines.map(line => line.startsWith("RRULE:")
+    ? line.replace(/([:;]UNTIL=)(\d{8})T(?:[01]\d|2[0-3])[0-5]\d[0-5]\dZ(?=;|$)/, "$1$2")
+    : line).join("\n");
+}
+
 /** Google cancellation-only exceptions carry identity, not a complete event. */
-export function normalizeGoogleTime(item: any, base: NormalizedEvent, master?: any): NormalizedEvent {
+export function normalizeGoogleTime(item: any, base: NormalizedEvent, master?: any, calendarTimeZone?: string): NormalizedEvent {
   const externalSeriesID = typeof item.recurringEventId === "string" ? item.recurringEventId : null;
   if (externalSeriesID && (!master || master.id !== externalSeriesID || !master.recurrence?.length || master.recurringEventId))
     throw new Error("Google occurrence requires a complete series master.");
@@ -63,7 +74,7 @@ export function normalizeGoogleTime(item: any, base: NormalizedEvent, master?: a
     ...base, start, end, isAllDay,
     status: "active", isCanceled: cancelled,
     title: cancelled ? master.summary ?? "(untitled)" : base.title,
-    recurrence: externalSeriesID ? null : item.recurrence?.join("\n") ?? null,
+    recurrence: externalSeriesID ? null : recurrence(item.recurrence, isAllDay, calendarTimeZone),
     timeModel: EventTimeModelSchema.parse(timeModel), externalSeriesID, originalStart,
   };
 }

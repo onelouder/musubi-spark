@@ -61,6 +61,7 @@ import {
   isTransientSyncError,
   providerAuthErrorFields,
   ProviderAuthError,
+  GoogleSeriesMasterUnavailableError,
 } from "./errors";
 import { recordExternalSyncFailure, recordSyncRun, recordSyncObjects } from "../metrics";
 import { ProviderEventWriteError, requireEventPatch } from "./event_write";
@@ -405,6 +406,7 @@ async function syncProviderImpl(
   // 2. pull objects per (now reconciled) calendar. Track which calendars really
   // changed so the scheduled sync can wake connected clients — the etag-aware
   // upsert makes a CalDAV full-fetch a quiet no-op when nothing moved.
+  let calendarReadError: GoogleSeriesMasterUnavailableError | undefined;
   for (const link of await getUserExternalCalendars(
     provider,
     userID,
@@ -465,6 +467,14 @@ async function syncProviderImpl(
         } : families.length ? { excludedEventIDs: [...excludedEventIDs], excludedSeriesIDs: [...excludedSeriesIDs] } : undefined,
       );
     } catch (error) {
+      if (provider === "google" && !taskOnly && error instanceof GoogleSeriesMasterUnavailableError) {
+        calendarReadError ??= error;
+        logger.warn("sync.calendar.incomplete", {
+          provider, userId: userID, accountId, calendarId: link.calendarID,
+          code: "google-series-master-unavailable",
+        });
+        continue;
+      }
       if (
         !taskOnly ||
         (provider !== "google" && provider !== "microsoft") ||
@@ -645,6 +655,7 @@ async function syncProviderImpl(
   // Tasks can commit independently, including their direct SSE invalidations,
   // while an unavailable Events resource remains a failed account/alert.
   if (eventCalendarDiscoveryError) throw eventCalendarDiscoveryError;
+  if (calendarReadError) throw calendarReadError;
   logger.debug("sync.account.completed", {
     provider,
     userId: userID,

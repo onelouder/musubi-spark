@@ -12,7 +12,7 @@ test("serves every server-rendered stylesheet as CSS", async ({ page }) => {
 
   expect(stylesheets.length).toBeGreaterThan(0);
   for (const href of stylesheets) {
-    const stylesheet = await page.request.get(href);
+    const stylesheet = await page.request.get(href, { headers: { Accept: "text/css,*/*;q=0.1" } });
     expect(stylesheet.ok(), href).toBe(true);
     expect(stylesheet.headers()["content-type"], href).toMatch(/^text\/css\b/);
   }

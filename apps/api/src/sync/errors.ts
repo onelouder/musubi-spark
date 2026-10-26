@@ -12,6 +12,13 @@ export class ProviderAuthError extends Error {
   }
 }
 
+export class GoogleSeriesMasterUnavailableError extends Error {
+  constructor() {
+    super("Google series hydration 404: a recurring event's master is unavailable.");
+    this.name = "GoogleSeriesMasterUnavailableError";
+  }
+}
+
 export function providerAuthErrorFields(error: unknown) {
   if (!(error instanceof ProviderAuthError)) return {};
   return {
