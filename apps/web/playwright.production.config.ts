@@ -5,9 +5,9 @@ import base from "./playwright.config";
 // the full browser suite. Never fall back to a dev server if the container dies.
 export default defineConfig({
   ...base,
-  grep: /redirects an anonymous Month request to sign in|opens a calendar for a bare \/app request|reads, filters and signs out of the authenticated Month/,
+  grep: /redirects an anonymous Month request to sign in|opens a calendar for a bare \/app request|reads, filters and signs out of the authenticated Month|serves every server-rendered stylesheet as CSS/,
   retries: 0,
-  testMatch: "month-read.spec.ts",
+  testMatch: ["month-read.spec.ts", "production-assets.spec.ts"],
   use: {
     ...base.use,
     baseURL: process.env.PLAYWRIGHT_ORIGIN ?? "http://127.0.0.1:4330",

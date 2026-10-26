@@ -1,0 +1,20 @@
+name: musubi-spark
+
+services:
+  gateway:
+    environment:
+      PUBLIC_HOST: :80
+    ports: !override
+      - "127.0.0.1:8783:80"
+
+  web:
+    image: musubi-spark-web:${MUSUBI_SPARK_REVISION:?Set the source revision in .env}
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+
+  api:
+    image: musubi-spark-api:${MUSUBI_SPARK_REVISION:?Set the source revision in .env}
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
